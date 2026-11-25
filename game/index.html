@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dot Pop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap">
+<style>
+:root {
+  --bg: #eef1f3; --grid: #dbe1e5; --ink: #18212b; --muted: #5a6773;
+  --panel: #ffffff; --line: #c5ced5; --red: #e63946; --veil: rgba(238,241,243,.88);
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141a21; --grid: #202a33; --ink: #eef1f3; --muted: #9aa7b3;
+    --panel: #1d252e; --line: #36424e; --red: #ff4b57; --veil: rgba(20,26,33,.88);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141a21; --grid: #202a33; --ink: #eef1f3; --muted: #9aa7b3;
+  --panel: #1d252e; --line: #36424e; --red: #ff4b57; --veil: rgba(20,26,33,.88);
+}
+html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  height: 100%; margin: 0; display: flex; flex-direction: column;
+  background: var(--bg); color: var(--ink);
+  font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.hud { display: flex; align-items: baseline; gap: 1.5rem; padding: .75rem 1rem .6rem; }
+.stat { display: flex; flex-direction: column; line-height: 1.1; }
+.stat small { font-size: .75rem; color: var(--muted); font-weight: 500; }
+.stat b { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.stat.level { margin-left: auto; text-align: right; }
+.stat.level b { font-size: 1.1rem; font-weight: 700; }
+.bar { height: 6px; background: var(--line); }
+.bar i { display: block; height: 100%; width: 100%; background: var(--red); }
+.arena {
+  position: relative; flex: 1; overflow: hidden; cursor: crosshair;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.target {
+  position: absolute; border-radius: 50%; background: var(--red);
+  box-shadow: inset 0 0 0 4px var(--red), inset 0 0 0 7px rgba(255,255,255,.85);
+  animation: shrink var(--life) linear forwards;
+  touch-action: manipulation;
+}
+@keyframes shrink { from { transform: scale(1); } to { transform: scale(.2); } }
+.target.pop { animation: pop .18s ease-out forwards; pointer-events: none; }
+@keyframes pop { to { transform: scale(1.5); opacity: 0; } }
+.plus {
+  position: absolute; font-weight: 800; font-size: 1.2rem; color: var(--ink);
+  pointer-events: none; animation: rise .5s ease-out forwards;
+}
+@keyframes rise { to { transform: translateY(-28px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .target.pop, .plus { animation-duration: .01s; }
+}
+.overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  padding: 1rem; background: var(--veil); cursor: default;
+}
+.overlay[hidden] { display: none; }
+.card {
+  width: min(100%, 26rem); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 1.5rem; box-sizing: border-box;
+}
+.card h1 { margin: 0 0 .4rem; font-size: 2.2rem; font-weight: 800; letter-spacing: -.02em; }
+.card p { margin: 0 0 1.1rem; color: var(--muted); line-height: 1.45; max-width: 60ch; }
+.card p.best { color: var(--ink); font-weight: 700; }
+fieldset { border: 0; padding: 0; margin: 0 0 .5rem; }
+legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45rem; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; padding: .65rem .25rem; font-weight: 700; cursor: pointer; border-left: 1px solid var(--line); }
+.seg label:first-of-type { border-left: 0; }
+.seg input:checked + label { background: var(--ink); color: var(--bg); }
+.seg input:focus-visible + label { outline: 3px solid var(--red); outline-offset: -3px; }
+.desc { font-size: .85rem; color: var(--muted); margin: 0 0 1.2rem !important; min-height: 1.2em; }
+.play {
+  width: 100%; font: inherit; font-size: 1.15rem; font-weight: 800; padding: .85rem;
+  border: 0; border-radius: 10px; background: var(--red); color: #fff; cursor: pointer;
+}
+.play:hover { filter: brightness(1.07); }
+.play:active { transform: translateY(1px); }
+.play:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hud">
+    <div class="stat"><small>Score</small><b id="score">0</b></div>
+    <div class="stat"><small>Time left</small><b id="time">30.0</b></div>
+    <div class="stat level"><small>Level</small><b id="levelName">Medium</b></div>
+  </div>
+  <div class="bar"><i id="barFill"></i></div>
+</header>
+
+<main class="arena" id="arena">
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h1 id="title">Dot Pop</h1>
+      <p id="message">Click the red dots before they shrink away. You have 30 seconds.</p>
+      <fieldset>
+        <legend>Pick a level</legend>
+        <div class="seg">
+          <input type="radio" name="level" id="lv-easy" value="easy"><label for="lv-easy">Easy</label>
+          <input type="radio" name="level" id="lv-medium" value="medium" checked><label for="lv-medium">Medium</label>
+          <input type="radio" name="level" id="lv-hard" value="hard"><label for="lv-hard">Hard</label>
+        </div>
+      </fieldset>
+      <p class="desc" id="desc"></p>
+      <button class="play" id="play" type="button">Play</button>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var DURATION = 30000;
+  // spawn = ms between new dots, life = ms before a dot shrinks away, size = dot diameter in px
+  var LEVELS = {
+    easy:   { name: "Easy",   spawn: 1100, life: 1900, size: 76 },
+    medium: { name: "Medium", spawn: 800,  life: 1400, size: 62 },
+    hard:   { name: "Hard",   spawn: 520,  life: 1000, size: 48 }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var arena = $("arena"), overlay = $("overlay"), scoreEl = $("score"), timeEl = $("time"),
+      barFill = $("barFill"), levelName = $("levelName"), titleEl = $("title"),
+      messageEl = $("message"), descEl = $("desc"), playBtn = $("play");
+
+  var running = false, score = 0, spawned = 0, endAt = 0, spawnTimer = null, tickTimer = null, L = LEVELS.medium;
+
+  function selectedKey() { return document.querySelector("input[name=level]:checked").value; }
+
+  function describe() {
+    var l = LEVELS[selectedKey()];
+    descEl.textContent = "A new dot every " + (l.spawn / 1000).toFixed(1) + " s. Each lasts " +
+      (l.life / 1000).toFixed(1) + " s.";
+  }
+
+  function getBest(key) {
+    try { return parseInt(localStorage.getItem("dotpop-best-" + key), 10) || 0; } catch (e) { return 0; }
+  }
+  function setBest(key, v) {
+    try { localStorage.setItem("dotpop-best-" + key, String(v)); } catch (e) {}
+  }
+
+  function spawn() {
+    var r = arena.getBoundingClientRect(), s = L.size;
+    var x = Math.random() * Math.max(0, r.width - s);
+    var y = Math.random() * Math.max(0, r.height - s);
+    var t = document.createElement("div");
+    t.className = "target";
+    t.style.cssText = "left:" + x + "px;top:" + y + "px;width:" + s + "px;height:" + s + "px;--life:" + L.life + "ms";
+    t.addEventListener("pointerdown", function (e) { hit(e, t, x, y, s); });
+    t.addEventListener("animationend", function (e) {
+      if (e.animationName === "shrink") t.remove();   // missed: it simply disappears
+      else if (e.animationName === "pop") t.remove();
+    });
+    arena.appendChild(t);
+    spawned++;
+  }
+
+  function hit(e, t, x, y, s) {
+    e.preventDefault();
+    if (!running || t.classList.contains("pop")) return;
+    score++;
+    scoreEl.textContent = score;
+    t.classList.add("pop");
+    var p = document.createElement("div");
+    p.className = "plus";
+    p.textContent = "+1";
+    p.style.left = (x + s / 2 - 10) + "px";
+    p.style.top = (y + s / 2 - 12) + "px";
+    p.addEventListener("animationend", function () { p.remove(); });
+    arena.appendChild(p);
+  }
+
+  function spawnLoop() {
+    if (!running) return;
+    spawn();
+    spawnTimer = setTimeout(spawnLoop, L.spawn);
+  }
+
+  function tick() {
+    var left = Math.max(0, endAt - performance.now());
+    timeEl.textContent = (left / 1000).toFixed(1);
+    barFill.style.width = (left / DURATION * 100) + "%";
+    if (left <= 0) end();
+  }
+
+  function clearArena() {
+    arena.querySelectorAll(".target, .plus").forEach(function (n) { n.remove(); });
+  }
+
+  function start() {
+    var key = selectedKey();
+    L = LEVELS[key];
+    clearArena();
+    score = 0; spawned = 0;
+    scoreEl.textContent = "0";
+    levelName.textContent = L.name;
+    overlay.hidden = true;
+    running = true;
+    endAt = performance.now() + DURATION;
+    spawnLoop();
+    tickTimer = setInterval(tick, 100);
+    tick();
+  }
+
+  function end() {
+    running = false;
+    clearTimeout(spawnTimer);
+    clearInterval(tickTimer);
+    timeEl.textContent = "0.0";
+    barFill.style.width = "0%";
+    clearArena();
+    var key = selectedKey(), prev = getBest(key), isNew = score > prev;
+    if (isNew) setBest(key, score);
+    titleEl.textContent = "Time\u2019s up";
+    messageEl.innerHTML = "";
+    var a = document.createElement("span");
+    a.textContent = "You popped " + score + " of " + spawned + " dots on " + L.name + ". ";
+    var b = document.createElement("p");
+    b.className = "best";
+    b.style.margin = ".5rem 0 0";
+    b.textContent = isNew ? "New best: " + score : "Best on " + L.name + ": " + prev;
+    messageEl.appendChild(a);
+    messageEl.appendChild(b);
+    playBtn.textContent = "Play again";
+    overlay.hidden = false;
+    playBtn.focus();
+  }
+
+  document.querySelectorAll("input[name=level]").forEach(function (r) {
+    r.addEventListener("change", function () { levelName.textContent = LEVELS[selectedKey()].name; describe(); });
+  });
+  playBtn.addEventListener("click", start);
+  describe();
+})();
+</script>
+</body>
+</html>
