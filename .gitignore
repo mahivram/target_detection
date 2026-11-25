@@ -1,0 +1,12 @@
+/debug.png
+/yolo26n.pt
+/yolo26s.pt
+/runs/
+
+# Local Python environment and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+
+# Generated Ultralytics dataset cache
+/dataset/**/labels.cache
