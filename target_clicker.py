@@ -1,15 +1,5 @@
 import ctypes
 import time
-
-# Make Windows use real physical pixels
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(2)
-except Exception:
-    try:
-        ctypes.windll.user32.SetProcessDPIAware()
-    except Exception:
-        pass
-
 import cv2
 import mss
 import numpy as np
