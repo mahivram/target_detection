@@ -15,6 +15,18 @@
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.arena.is-paused .target { animation-play-state: paused; }
+.pause-info {
+  position: absolute; z-index: 2; top: .75rem; left: 50%; transform: translateX(-50%);
+  width: min(calc(100% - 1.5rem), 28rem); max-height: 45%; overflow: auto;
+  padding: .85rem 1rem; box-sizing: border-box; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--panel); box-shadow: 0 4px 20px rgba(0,0,0,.15);
+}
+.pause-info[hidden] { display: none; }
+.pause-info h2 { margin: 0 0 .35rem; font-size: 1rem; }
+.pause-info p { margin: 0 0 .5rem; color: var(--muted); font-size: .8rem; }
+.pause-info ul { margin: 0; padding-left: 1.2rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.pause-info li + li { margin-top: .2rem; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #141a21; --grid: #202a33; --ink: #eef1f3; --muted: #9aa7b3;
@@ -31,12 +43,20 @@ body {
   background: var(--bg); color: var(--ink);
   font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-.hud { display: flex; align-items: baseline; gap: 1.5rem; padding: .75rem 1rem .6rem; }
+.hud { display: flex; align-items: center; gap: 1.5rem; padding: .75rem 1rem .6rem; }
 .stat { display: flex; flex-direction: column; line-height: 1.1; }
 .stat small { font-size: .75rem; color: var(--muted); font-weight: 500; }
 .stat b { font-size: 1.9rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .stat.level { margin-left: auto; text-align: right; }
 .stat.level b { font-size: 1.1rem; font-weight: 700; }
+.dev-controls { display: flex; align-items: center; gap: .6rem; }
+.dev-controls[hidden] { display: none; }
+.dev-controls label { display: flex; align-items: center; gap: .35rem; font-size: .85rem; }
+.dev-controls button {
+  font: inherit; font-weight: 700; padding: .4rem .65rem; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--panel); color: var(--ink); cursor: pointer;
+}
+.dev-controls button:focus-visible, .dev-controls input:focus-visible { outline: 3px solid var(--red); }
 .bar { height: 6px; background: var(--line); }
 .bar i { display: block; height: 100%; width: 100%; background: var(--red); }
 .arena {
@@ -63,6 +83,12 @@ body {
 @keyframes rise { to { transform: translateY(-28px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .target.pop, .plus { animation-duration: .01s; }
+}
+@media (max-width: 600px) {
+  .hud { flex-wrap: wrap; gap: .7rem 1rem; }
+  .stat b { font-size: 1.5rem; }
+  .stat.level { margin-left: auto; }
+  .dev-controls { order: 4; width: 100%; }
 }
 .overlay {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -100,11 +126,20 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     <div class="stat"><small>Score</small><b id="score">0</b></div>
     <div class="stat"><small>Time left</small><b id="time">30.0</b></div>
     <div class="stat level"><small>Level</small><b id="levelName">Medium</b></div>
+    <div class="dev-controls" id="devControls" hidden>
+      <button id="pause" type="button">Pause</button>
+      <label><input id="infiniteTime" type="checkbox"> Infinite time</label>
+    </div>
   </div>
   <div class="bar"><i id="barFill"></i></div>
 </header>
 
 <main class="arena" id="arena">
+  <section class="pause-info" id="pauseInfo" aria-live="polite" hidden>
+    <h2>Paused — visible targets</h2>
+    <p>Center coordinates in viewport pixels (x, y).</p>
+    <ul id="targetCoordinates"></ul>
+  </section>
   <div class="overlay" id="overlay">
     <div class="card">
       <h1 id="title">Dot Pop</h1>
@@ -118,6 +153,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
         </div>
       </fieldset>
       <p class="desc" id="desc"></p>
+      <label><input id="devMode" type="checkbox"> Enable developer mode</label>
       <button class="play" id="play" type="button">Play</button>
     </div>
   </div>
@@ -136,9 +172,13 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
   var $ = function (id) { return document.getElementById(id); };
   var arena = $("arena"), overlay = $("overlay"), scoreEl = $("score"), timeEl = $("time"),
       barFill = $("barFill"), levelName = $("levelName"), titleEl = $("title"),
-      messageEl = $("message"), descEl = $("desc"), playBtn = $("play");
+      messageEl = $("message"), descEl = $("desc"), playBtn = $("play"),
+      devMode = $("devMode"), devControls = $("devControls"), pauseBtn = $("pause"),
+      infiniteTime = $("infiniteTime"), pauseInfo = $("pauseInfo"), coordinatesEl = $("targetCoordinates");
 
-  var running = false, score = 0, spawned = 0, endAt = 0, spawnTimer = null, tickTimer = null, L = LEVELS.medium;
+  var running = false, paused = false, devEnabled = false, score = 0, spawned = 0,
+      endAt = 0, pauseStartedAt = 0, savedTimeLeft = DURATION,
+      spawnTimer = null, tickTimer = null, L = LEVELS.medium;
 
   function selectedKey() { return document.querySelector("input[name=level]:checked").value; }
 
@@ -161,6 +201,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     var y = Math.random() * Math.max(0, r.height - s);
     var t = document.createElement("div");
     t.className = "target";
+    t.dataset.targetType = "red dot";
     t.style.cssText = "left:" + x + "px;top:" + y + "px;width:" + s + "px;height:" + s + "px;--life:" + L.life + "ms";
     t.addEventListener("pointerdown", function (e) { hit(e, t, x, y, s); });
     t.addEventListener("animationend", function (e) {
@@ -173,7 +214,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
 
   function hit(e, t, x, y, s) {
     e.preventDefault();
-    if (!running || t.classList.contains("pop")) return;
+    if (!running || paused || t.classList.contains("pop")) return;
     score++;
     scoreEl.textContent = score;
     t.classList.add("pop");
@@ -193,6 +234,12 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
   }
 
   function tick() {
+    if (paused) return;
+    if (infiniteTime.checked) {
+      timeEl.textContent = "\u221e";
+      barFill.style.width = "100%";
+      return;
+    }
     var left = Math.max(0, endAt - performance.now());
     timeEl.textContent = (left / 1000).toFixed(1);
     barFill.style.width = (left / DURATION * 100) + "%";
@@ -206,12 +253,20 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
   function start() {
     var key = selectedKey();
     L = LEVELS[key];
+    devEnabled = devMode.checked;
+    devControls.hidden = !devEnabled;
+    infiniteTime.checked = false;
+    paused = false;
+    arena.classList.remove("is-paused");
+    pauseInfo.hidden = true;
+    pauseBtn.textContent = "Pause";
     clearArena();
     score = 0; spawned = 0;
     scoreEl.textContent = "0";
     levelName.textContent = L.name;
     overlay.hidden = true;
     running = true;
+    savedTimeLeft = DURATION;
     endAt = performance.now() + DURATION;
     spawnLoop();
     tickTimer = setInterval(tick, 100);
@@ -220,6 +275,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
 
   function end() {
     running = false;
+    paused = false;
     clearTimeout(spawnTimer);
     clearInterval(tickTimer);
     timeEl.textContent = "0.0";
@@ -238,10 +294,71 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     messageEl.appendChild(a);
     messageEl.appendChild(b);
     playBtn.textContent = "Play again";
+    devControls.hidden = true;
     overlay.hidden = false;
     playBtn.focus();
   }
 
+  function showTargetCoordinates() {
+    coordinatesEl.textContent = "";
+    var targets = arena.querySelectorAll(".target:not(.pop)");
+    if (!targets.length) {
+      var empty = document.createElement("li");
+      empty.textContent = "No visible targets";
+      coordinatesEl.appendChild(empty);
+      return;
+    }
+    targets.forEach(function (target, index) {
+      var rect = target.getBoundingClientRect();
+      var item = document.createElement("li");
+      item.textContent = "Target " + (index + 1) + " (" + target.dataset.targetType + "): " +
+        Math.round(rect.left + rect.width / 2) + ", " + Math.round(rect.top + rect.height / 2) + " px";
+      coordinatesEl.appendChild(item);
+    });
+  }
+
+  function togglePause() {
+    if (!running || !devEnabled) return;
+    paused = !paused;
+    if (paused) {
+      pauseStartedAt = performance.now();
+      clearTimeout(spawnTimer);
+      clearInterval(tickTimer);
+      arena.classList.add("is-paused");
+      pauseBtn.textContent = "Resume";
+      showTargetCoordinates();
+      pauseInfo.hidden = false;
+      return;
+    }
+    endAt += performance.now() - pauseStartedAt;
+    arena.classList.remove("is-paused");
+    pauseInfo.hidden = true;
+    pauseBtn.textContent = "Pause";
+    spawnTimer = setTimeout(spawnLoop, L.spawn);
+    tickTimer = setInterval(tick, 100);
+    tick();
+  }
+
+  devMode.addEventListener("change", function () {
+    devControls.hidden = !devMode.checked || !running;
+  });
+  pauseBtn.addEventListener("click", togglePause);
+  infiniteTime.addEventListener("change", function () {
+    var now = paused ? pauseStartedAt : performance.now();
+    if (infiniteTime.checked) {
+      savedTimeLeft = Math.max(0, endAt - now);
+      timeEl.textContent = "\u221e";
+      barFill.style.width = "100%";
+      return;
+    }
+    endAt = now + savedTimeLeft;
+    if (paused) {
+      timeEl.textContent = (savedTimeLeft / 1000).toFixed(1);
+      barFill.style.width = (savedTimeLeft / DURATION * 100) + "%";
+    } else {
+      tick();
+    }
+  });
   document.querySelectorAll("input[name=level]").forEach(function (r) {
     r.addEventListener("change", function () { levelName.textContent = LEVELS[selectedKey()].name; describe(); });
   });
