@@ -15,7 +15,7 @@
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-.arena.is-paused .target { animation-play-state: paused; }
+.arena.is-paused .target, .arena.is-paused .plus { animation-play-state: paused; }
 .pause-info {
   position: absolute; z-index: 2; top: .75rem; left: 50%; transform: translateX(-50%);
   width: min(calc(100% - 1.5rem), 28rem); max-height: 45%; overflow: auto;
@@ -52,11 +52,14 @@ body {
 .dev-controls { display: flex; align-items: center; gap: .6rem; }
 .dev-controls[hidden] { display: none; }
 .dev-controls label { display: flex; align-items: center; gap: .35rem; font-size: .85rem; }
-.dev-controls button {
+.pause-button, .dev-controls button {
   font: inherit; font-weight: 700; padding: .4rem .65rem; border: 1px solid var(--line);
   border-radius: 8px; background: var(--panel); color: var(--ink); cursor: pointer;
 }
-.dev-controls button:focus-visible, .dev-controls input:focus-visible { outline: 3px solid var(--red); }
+.pause-button:disabled { opacity: .55; cursor: not-allowed; }
+.pause-button:focus-visible, .dev-controls button:focus-visible, .dev-controls input:focus-visible {
+  outline: 3px solid var(--red);
+}
 .bar { height: 6px; background: var(--line); }
 .bar i { display: block; height: 100%; width: 100%; background: var(--red); }
 .arena {
@@ -126,8 +129,8 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     <div class="stat"><small>Score</small><b id="score">0</b></div>
     <div class="stat"><small>Time left</small><b id="time">30.0</b></div>
     <div class="stat level"><small>Level</small><b id="levelName">Medium</b></div>
+    <button class="pause-button" id="pause" type="button" disabled>Pause</button>
     <div class="dev-controls" id="devControls" hidden>
-      <button id="pause" type="button">Pause</button>
       <label><input id="infiniteTime" type="checkbox"> Infinite time</label>
     </div>
   </div>
@@ -136,9 +139,9 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
 
 <main class="arena" id="arena">
   <section class="pause-info" id="pauseInfo" aria-live="polite" hidden>
-    <h2>Paused — visible targets</h2>
-    <p>Center coordinates in viewport pixels (x, y).</p>
-    <ul id="targetCoordinates"></ul>
+    <h2 id="pauseTitle">Paused</h2>
+    <p id="pauseDescription">Press Escape to resume.</p>
+    <ul id="targetCoordinates" hidden></ul>
   </section>
   <div class="overlay" id="overlay">
     <div class="card">
@@ -174,7 +177,8 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
       barFill = $("barFill"), levelName = $("levelName"), titleEl = $("title"),
       messageEl = $("message"), descEl = $("desc"), playBtn = $("play"),
       devMode = $("devMode"), devControls = $("devControls"), pauseBtn = $("pause"),
-      infiniteTime = $("infiniteTime"), pauseInfo = $("pauseInfo"), coordinatesEl = $("targetCoordinates");
+      infiniteTime = $("infiniteTime"), pauseInfo = $("pauseInfo"), pauseTitle = $("pauseTitle"),
+      pauseDescription = $("pauseDescription"), coordinatesEl = $("targetCoordinates");
 
   var running = false, paused = false, devEnabled = false, score = 0, spawned = 0,
       endAt = 0, pauseStartedAt = 0, savedTimeLeft = DURATION,
@@ -260,6 +264,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     arena.classList.remove("is-paused");
     pauseInfo.hidden = true;
     pauseBtn.textContent = "Pause";
+    pauseBtn.disabled = false;
     clearArena();
     score = 0; spawned = 0;
     scoreEl.textContent = "0";
@@ -276,6 +281,8 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
   function end() {
     running = false;
     paused = false;
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = "Pause";
     clearTimeout(spawnTimer);
     clearInterval(tickTimer);
     timeEl.textContent = "0.0";
@@ -318,7 +325,7 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
   }
 
   function togglePause() {
-    if (!running || !devEnabled) return;
+    if (!running) return;
     paused = !paused;
     if (paused) {
       pauseStartedAt = performance.now();
@@ -326,7 +333,16 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
       clearInterval(tickTimer);
       arena.classList.add("is-paused");
       pauseBtn.textContent = "Resume";
-      showTargetCoordinates();
+      if (devEnabled) {
+        pauseTitle.textContent = "Paused — visible targets";
+        pauseDescription.textContent = "Center coordinates in viewport pixels (x, y).";
+        coordinatesEl.hidden = false;
+        showTargetCoordinates();
+      } else {
+        pauseTitle.textContent = "Paused";
+        pauseDescription.textContent = "Press Escape to resume.";
+        coordinatesEl.hidden = true;
+      }
       pauseInfo.hidden = false;
       return;
     }
@@ -343,6 +359,11 @@ legend { font-size: .85rem; color: var(--muted); padding: 0; margin-bottom: .45r
     devControls.hidden = !devMode.checked || !running;
   });
   pauseBtn.addEventListener("click", togglePause);
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || e.repeat || !running) return;
+    e.preventDefault();
+    togglePause();
+  });
   infiniteTime.addEventListener("change", function () {
     var now = paused ? pauseStartedAt : performance.now();
     if (infiniteTime.checked) {
